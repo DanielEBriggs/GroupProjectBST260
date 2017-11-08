@@ -20,7 +20,6 @@ mbo$retweeted <- NULL
 #we will process in a Corpus with the tm package for simplicity
 TTCorp <- Corpus(VectorSource(mbo$text))
 TTCorp <- tm_map(TTCorp, content_transformer(tolower))
-TTCorp <- tm_map(TTCorp, removePunctuation)
 TTCorp <- tm_map(TTCorp, removeNumbers)
 mbotweets <- data.frame(sapply(TTCorp, identity), stringsAsFactors = F)
 
@@ -31,7 +30,7 @@ Stopwords <- stopwords(kind = "en")
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
 #what we will clean
-y = mbotweets[1:dim(mbotweets)[1],1]
+y = tolower(mbotweets[1:dim(mbotweets)[1],1])
 
 #remove stop words
 slimmed <- lapply(y, function(x) {
@@ -43,10 +42,13 @@ slimmed <- lapply(y, function(x) {
 cslim = list()
 for(i in 1:length(y)){
   tweet <- slimmed[[i]]
-  tweet <- gsub("rt\\w+", "", tweet) #remove retweet (still needs work)
+  tweet <- sub("rt ", "", tweet) #remove retweet (still needs work)
   tweet <- gsub("@\\w+", "", tweet) # remove at(@)
-  tweet <- gsub("https://\\w+", "", tweet)  # remove links https (still needs work)
-  tweet <- gsub("[ |\t]{2,}", "", tweet) # remove tabs 
+  
+  #tweet <- gsub("https://\\w+W+", "", tweet)  # remove links https (still needs work)
+  #tweet <- gsub("[ |\t]{2,}", "", tweet) # remove tabs 
+  tweet <- iconv(tweet, "latin1", "ASCII", sub="") #makes emojis readable 
+  tweet <- gsub("<[^>]+>", "", tweet) #removes remaining text from emojis
   tweet <- gsub("^ ", " ", tweet)  # remove blank spaces at the beginning
   tweet <- gsub(" $", " ", tweet) # remove blank spaces at the end
   cslim <- c(cslim, tweet)

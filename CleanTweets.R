@@ -17,11 +17,6 @@ mbo$favorited <- NULL
 mbo$statusSource <- NULL
 mbo$retweeted <- NULL
 
-#we will process in a Corpus with the tm package for simplicity
-TTCorp <- Corpus(VectorSource(mbo$text))
-TTCorp <- tm_map(TTCorp, content_transformer(tolower))
-TTCorp <- tm_map(TTCorp, removeNumbers)
-mbotweets <- data.frame(sapply(TTCorp, identity), stringsAsFactors = F)
 
 #identifies all english stopwords
 Stopwords <- stopwords(kind = "en")
@@ -45,7 +40,7 @@ for(i in 1:length(y)){
   tweet <- sub("rt ", "", tweet) #remove retweet (still needs work)
   tweet <- gsub("@\\w+", "", tweet) # remove at(@)
   
-  #tweet <- gsub("https://\\w+W+", "", tweet)  # remove links https (still needs work)
+  #tweet <- gsub(" ?(f|ht)(tp)(s?)(://)(.*)[.|/]?[^//S{50,}]", "", tweet)  # remove links https (still needs work)
   #tweet <- gsub("[ |\t]{2,}", "", tweet) # remove tabs 
   tweet <- iconv(tweet, "latin1", "ASCII", sub="") #makes emojis readable 
   tweet <- gsub("<[^>]+>", "", tweet) #removes remaining text from emojis

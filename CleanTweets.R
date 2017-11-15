@@ -25,28 +25,37 @@ Stopwords <- stopwords(kind = "en")
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
 #what we will clean
-y = tolower(mbotweets[1:dim(mbotweets)[1],1])
+mbo[,1] <- tolower(mbo[1:dim(mbo)[1],1])
 
 #remove stop words
-slimmed <- lapply(y, function(x) {
-    text <- unlist(strsplit(x, " "))
+tweets <- unlist(lapply(mbo[,1], function(tweet) {
+    text <- unlist(strsplit(tweet, " "))
     text <- text[text %!in% Stopwords]
-    text <- paste(text, collapse = " ")
-})
+    tweet <- paste(text, collapse = " ")
+}))
 
-cslim = list()
-for(i in 1:length(y)){
-  tweet <- slimmed[[i]]
-  tweet <- sub("rt ", "", tweet) #remove retweet (still needs work)
+
+unnest_reg <- "([^A-Za-z_\\d#@']|'(?![A-Za-z_\\d#@]))"
+
+replace_reg <- "https://t.co/[A-Za-z\\d]+|http://[A-Za-z\\d]+|&amp;|&lt;|&gt;|RT|https"
+
+for(i in 1:length(mbo[,1])){
+  tweet <- tweets
+  tweet <- mbo[sample(1:65955,1),1]
+  tweet <- sub("rt ", "", tweet) #remove retweet 
   tweet <- gsub("@\\w+", "", tweet) # remove at(@)
-  
-  #tweet <- gsub(" ?(f|ht)(tp)(s?)(://)(.*)[.|/]?[^//S{50,}]", "", tweet)  # remove links https (still needs work)
-  #tweet <- gsub("[ |\t]{2,}", "", tweet) # remove tabs 
+  tweet <- gsub("&lt;3","",tweet) #removes ASCII hearts <3 
+  tweet <- gsub("&lt;|&gt;|&le;|&ge;","",tweet) #removes html <, >, <=, >=
+  tweet <- str_replace_all(tweet ,replace_reg, "")  # remove links https 
+  tweet <- gsub("[ |\t]{2,}", " ", tweet) # remove tabs 
   tweet <- iconv(tweet, "latin1", "ASCII", sub="") #makes emojis readable 
   tweet <- gsub("<[^>]+>", "", tweet) #removes remaining text from emojis
-  tweet <- gsub("^ ", " ", tweet)  # remove blank spaces at the beginning
-  tweet <- gsub(" $", " ", tweet) # remove blank spaces at the end
-  cslim <- c(cslim, tweet)
+  tweet <- gsub('[[:punct:] ]+',' ',tweet) #removes punctuation
+  tweet <- gsub("[\r|\n|\t|\v|\f]", "", tweet) #removes form feeds tabs etc
+  tweet <- gsub("^ ", "", tweet)  # remove blank spaces at the beginning
+  tweet <- gsub(" $", "", tweet) # remove blank spaces at the end
+  mbo[i,1] <- tweet
 }
 
-head(cslim) 
+write.csv(x = mbo[,-1], file = "C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260/no_text_identities.csv")
+write.csv(x = mbo, file = "C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260/text_identities.csv")

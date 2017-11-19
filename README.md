@@ -1,4 +1,4 @@
-# GroupProjectBST260
+# Project Proposal
 ###### Background and Motivation
 Discuss your motivations and reasons for choosing this project, especially any background or research interests that may have influenced your decision.
 

@@ -17,6 +17,8 @@ mbo$favorited <- NULL
 mbo$statusSource <- NULL
 mbo$retweeted <- NULL
 
+filter <- which(mbo$screenName == "Limbaugh2016")
+View(mbo[filter,])
 
 #identifies all english stopwords
 Stopwords <- stopwords(kind = "en")
@@ -34,14 +36,12 @@ tweets <- unlist(lapply(mbo[,1], function(tweet) {
     tweet <- paste(text, collapse = " ")
 }))
 
-
 unnest_reg <- "([^A-Za-z_\\d#@']|'(?![A-Za-z_\\d#@]))"
 
 replace_reg <- "https://t.co/[A-Za-z\\d]+|http://[A-Za-z\\d]+|&amp;|&lt;|&gt;|RT|https"
 
 for(i in 1:length(mbo[,1])){
-  tweet <- tweets
-  tweet <- mbo[sample(1:65955,1),1]
+  tweet <-tweets[i]
   tweet <- sub("rt ", "", tweet) #remove retweet 
   tweet <- gsub("@\\w+", "", tweet) # remove at(@)
   tweet <- gsub("&lt;3","",tweet) #removes ASCII hearts <3 

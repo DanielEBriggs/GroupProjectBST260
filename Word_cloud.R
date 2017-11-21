@@ -8,6 +8,17 @@ library("tm")
 library("SnowballC")
 library("wordcloud")
 library("RColorBrewer")
+library(dplyr)
+library(tidytext)
+library(tidyverse)
+data("stop_words")
+
+tweets <- read.csv("text_identities.csv", stringsAsFactors = FALSE)
+
+#Seperates tweets into one line per word
+
+tokens <- unnest_tokens(tweets, word, text, to_lower = TRUE) %>%
+  anti_join(stop_words)
 
 cloud <- tokens %>%
   select(word) %>%

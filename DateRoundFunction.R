@@ -14,7 +14,7 @@ myRound <- function (x, convert = TRUE)  {
   }
   x <- trunc.POSIXt(x, units = "mins")
   if(convert) {
-    x <- format(x, format = "%y-%m-%d %H:%M")
+    x <- format(x, format = "%Y-%m-%d %H:%M")
   }
   x
 }

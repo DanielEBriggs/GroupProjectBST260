@@ -1,0 +1,142 @@
+---
+title: "Graphs"
+author: "Daniel Briggs"
+date: "November 24, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(igraph)
+library(dplyr)
+library(tidytext)
+library(tidyverse)
+library(gplots)
+library(ggplot2)
+setwd('C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260')
+dat <- read.csv("text_identities.csv", stringsAsFactors = F)
+dat$truncated <- NULL
+dat$replyToSID <- NULL
+dat$replyToUID <- NULL
+dat$longitude <- NULL
+dat$latitude <- NULL
+
+
+afinn_sentiments <- get_sentiments("afinn")
+
+tokens <- unnest_tokens(dat, word, text, to_lower = TRUE) %>%
+  anti_join(stop_words)
+
+tokens_afinn_sentiment <- tokens %>%
+  inner_join(afinn_sentiments) %>%
+  group_by(id, created) %>%
+  mutate(tweet_sentiment = mean(score)) 
+
+
+
+#only take unique combinations of participants
+dat <- unique(tokens_afinn_sentiment[c("X", "screenName", "replyToSN", "created", "retweetCount", "favoriteCount", "tweet_sentiment")])
+
+
+
+#those who tweet
+tweeters <- unique(dat$screenName)
+
+#those who are tweeted at
+ind <- !is.na(dat$replyToSN)
+responders <- unique(dat$replyToSN[ind])
+
+####weighted network
+#build the the adjacency matrix
+ind <- which(!is.na(dat$replyToSN))
+dat.matrix <- as.matrix(dat[ind,c("replyToSN","screenName","tweet_sentiment")]) 
+g.w <- graph.edgelist(dat.matrix[,1:2], directed = FALSE)
+
+#scale the vertices to degree size
+g.w <- simplify(g.w)
+deg <- degree(g.w, mode = 'all')
+V(g.w)$size <- sqrt(deg)*3
+
+#add the weights
+weights <- as.numeric(dat.matrix[,3])
+weights[weights == 0] <- 10^-6
+E(g.w)$weight <- weights
+summary(weights)
+```
+
+```{r}
+#summary about the degrees of this graph 
+PDF <- degree.distribution(g.w)
+CDF <- degree.distribution(g.w, cumulative = T)
+plot(x = 0:max(degree(g.w)), y=1-CDF, pch=19, cex=0.5, col="orange", 
+     xlab="Degree", ylab="Frequency", type = 'o')
+points(PDF, type = 'o', col = 'blue', cex = 0.5)
+
+weights <- data.frame(weights)
+ggplot(weights) + geom_histogram(aes(weights), fill = 'red', col = 'black', binwidth = 0.5)
+
+clusters <- data.frame(clusters = clusters(g.w)$csize)
+ggplot(clusters) + geom_histogram(aes(clusters), fill = 'purple', col = 'orange', bins = 20) + scale_y_log10() + scale_x_log10()
+
+
+g.w.mod <- g.w
+E(g.w.mod)$actweight <- E(g.w)$weight
+E(g.w.mod)$weight <- abs(E(g.w)$weight)
+x <- betweenness(g.w.mod)
+y <- closeness(g.w.mod)
+first.order.hood <- neighborhood.size(g.w.mod)
+second.order.hood <- neighborhood.size(g.w.mod, order = 2)
+ggplot(data.frame(foh = first.order.hood, soh = second.order.hood)) + geom_point(aes(foh, soh, col = soh - foh))
+
+
+```
+
+
+```{r}
+V(g.w)$comp <- components(g.w)$membership
+
+
+#isolate 15 largest componets
+comps <- as.numeric(names(sort(table(V(g.w)$comp), decreasing = T)[1:15]))
+length(comps)
+ind <- which(V(g.w)$comp %in% comps)
+main <- induced_subgraph(g.w,ind)
+
+#
+l <- layout_with_mds(main)
+plot(main, layout = l, vertex.label = NA, edge.width = 0.01, main = "Largest Connected Component")
+
+positive <- delete_edges(main, E(main)[weight <= 10^-6])
+negative <- delete_edges(main, E(main)[weight > 10^-6])
+
+plot(positive, vertex.label = NA, layout = layout_with_mds(positive), main = "Positive Connections\nin\n Largest Connected Component")
+plot(negative, vertex.label = NA, layout = layout_with_mds(negative), main = "Negative Connections\nin\n Largest Connected Component")
+```
+
+```{r}
+
+ind <- which(V(main)$comp %in% as.numeric(names(sort(table(V(main)$comp),decreasing = T)[1])))
+LCC <- induced_subgraph(main,ind)
+
+vertices_oij <- vertex_attr(LCC)$name
+
+#issa way to force it to happen :( 
+oijs = c()
+for(i in vertices_oij){
+  one <- unique(neighbors(LCC,i))
+    for(j in vertices_oij){
+      two <- unique(neighbors(LCC,j))
+      if(i == j){oij = NA} 
+      else {
+        if(length(one) + length(two) - 2 > 0 & length(one) > 0 & length(two) > 0){ 
+          oij <- sum(one %in% two)/(length(one) + length(two) - 2 - sum(one %in% two))
+        }
+        else{
+          oij = NA
+        }
+      }
+    oijs = c(oijs, oij)
+    }
+}
+```
+

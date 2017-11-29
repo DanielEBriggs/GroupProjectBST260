@@ -38,19 +38,25 @@ tweet_sentiment_time <- tokens_afinn_sentiment %>%
   mutate(day = "", day = replace(day, str_sub(created, start = 9, end = 10) == "29", "Sunday"),
          day = replace(day, str_sub(created, start = 9, end = 10) == "28", "Saturday"),
          day = replace(day, str_sub(created, start = 9, end = 10) == "27", "Friday"),
-         minutes = 60 * 24 * as.numeric(times(str_sub(created, start = -8, end = -1)))) %>%
+         minutes = round(60 * 24 * as.numeric(times(str_sub(created, start = -8, end = -1))), 0)) %>%
   select(created, id, screenName, retweetCount, tweet_sentiment, day, minutes)
   
   
 tweet_sentiment_time %>%
+  group_by(minutes) %>%
+  mutate(tweet_sentiment = mean(tweet_sentiment)) %>%
   ggplot() +
-  geom_point(aes(x = minutes, y = tweet_sentiment, col = day))
+  geom_smooth(aes(x = minutes, y = tweet_sentiment, col = day)) +
+  scale_x_continuous(limits = c(720,740))
 
 
 tweet_sentiment_time %>%
-  group_by(day) %>%
-  summarise(mean(tweet_sentiment))
+  group_by(day, minutes) %>%
+  filter(minutes > 720 & minutes < 740) %>%
+  summarise(mean(tweet_sentiment), n = n())
 
 
+nrc_sentiments %>%
+  distinct(sentiment)
 
 

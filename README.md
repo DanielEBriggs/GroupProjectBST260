@@ -5,3 +5,4 @@
 * classification by emotion, quantify
 * Host shiny app on http://www.shinyapps.io/ to put link into github pages
 * Make youtube link for video to host into github pages
+* Remove all setwd() commands at header of Rmd ; make sure read_csv is reading from github repo

@@ -14,8 +14,9 @@ library(shinyTime)
 library(dplyr)
 library(tidytext)
 library(tidyverse)
+library(scales)
 library(wordcloud)
-data("stop_words")
+
 setwd('C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260')
 tweets <- read.csv("text_identities.csv", stringsAsFactors = FALSE)
 source("DateRoundFunction.R")
@@ -42,6 +43,20 @@ cloud <- tokens_afinn_sentiment %>%
 cloud <- cloud %>% mutate(day = as.character(as.Date(created)), time = unlist(strsplit(created, " "))[2])
 cloud <- cloud %>% mutate(hour = as.numeric(unlist(strsplit(time, ":"))[1]), minute = as.numeric(unlist(strsplit(time, ":"))[2]))
 cloud <- cloud %>% ungroup
+
+#get overall word counts for each 15 min interval
+length(unique(cloud$created))
+counts <- cloud %>% group_by(created) %>%
+  summarize(count_15 = n())
+cloud <- cloud %>% left_join(counts, by=c("created"))
+#
+cloud$rescaled <- rescale(cloud$count_15, to = c(2, 7))
+
+#color
+pal <- colorRampPalette(c("red", "yellow", "green"))
+
+
+
 # Define UI for application that draws a wordcloud
 ui <- fluidPage(
    
@@ -62,7 +77,7 @@ ui <- fluidPage(
                    value = 0,
                    step = 1,
                    animate = 
-                     animationOptions(interval = 3000, loop = F)
+                     animationOptions(interval = 5620, loop = T)
      ),      
      sliderInput("minute",
                  "Minute:",
@@ -71,18 +86,18 @@ ui <- fluidPage(
                  value = 0,
                  step = 15,
                  animate = 
-                   animationOptions(interval = 500, loop = T)
+                   animationOptions(interval = 1500, loop = T)
      ),
 
-      sliderInput("maxfreq",
-                  "Max Frequency:",
+      sliderInput("maxwords",
+                  "Maximum (Most Frequent) Words:",
                   min = 1,
                   max = 50,
                   value = 50
       )
      ),
      mainPanel(
-       plotOutput("wordcloud"), width=12
+       plotOutput("wordcloud"), position = "right"
      )
     )
    )
@@ -104,10 +119,12 @@ server <- function(input, output){
 
      times <- time()
      # draw the word cloud
-     wordcloud_rep(words = times$word, freq = times$n, min.freq = 1,
-                   max.words=input$maxfreq, random.order=FALSE, random.color = FALSE,
+     wordcloud_rep(words = times$word, freq = times$n, scale = c(7,.8), 
+                   min.freq = 1,
+                   max.words=input$maxwords, random.order=FALSE,
+                   random.color = FALSE,
                    rot.per=0.35, ordered.colors=TRUE,
-                   colors=brewer.pal(8, "RdYlGn")[factor(times$score)])
+                   colors=pal(11)[factor(times$score)])
    })
 }
 

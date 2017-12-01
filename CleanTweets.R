@@ -6,19 +6,20 @@
 # install.packages("stringi")
 # install.packages("stringr")
 # install.packages("tm")
+# 
 #######
 #load packages
-x <- c("readr", "stringr", "plyr", "tm", "stringi", "stringr", "tm")
+x <- c("readr", "stringr", "plyr", "tm", "stringi", "stringr", "tm", "RCurl")
 lapply(x, require, character.only = T)
 
 #read data and remove unneccesary variables
-mbo <- read.csv("C:/Users/debri/Desktop/BST 260/murfreesboro102817.csv", stringsAsFactors = FALSE)
+url <- "https://raw.githubusercontent.com/twitter260/twitter260.github.io/master/our_code/murfreesboro102817.csv"
+mbo <- read.csv(url(url), stringsAsFactors = FALSE)
+
+#remove variables personal to Daniel Briggs
 mbo$favorited <- NULL
 mbo$statusSource <- NULL
 mbo$retweeted <- NULL
-
-filter <- which(mbo$screenName == "Limbaugh2016")
-View(mbo[filter,])
 
 #identifies all english stopwords
 Stopwords <- stopwords(kind = "en")
@@ -57,5 +58,3 @@ for(i in 1:length(mbo[,1])){
   mbo[i,1] <- tweet
 }
 
-write.csv(x = mbo[,-1], file = "C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260/no_text_identities.csv")
-write.csv(x = mbo, file = "C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260/text_identities.csv")

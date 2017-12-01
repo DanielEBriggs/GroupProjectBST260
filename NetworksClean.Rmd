@@ -7,12 +7,31 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#all the tools in the toolshed
 require(igraph)
 library(dplyr)
 library(tidytext)
 library(tidyverse)
 library(gplots)
 library(ggplot2)
+library(network)
+library(RColorBrewer)
+library(intergraph)
+library(ggnet)
+library(svgPanZoom)    
+#library(magick)
+#library(SVGAnnotation) 
+library(DT) 
+library(ggrepel)
+library(Hmisc)
+library(ggnetwork)
+library(ggiraph)
+library(stringr)
+#library(ggraph)
+#library(ggforce)
+#library(gganimate)
+library(sna)
+
 setwd('C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260')
 dat <- read.csv("text_identities.csv", stringsAsFactors = F)
 dat$truncated <- NULL
@@ -53,90 +72,351 @@ dat.matrix <- as.matrix(dat[ind,c("replyToSN","screenName","tweet_sentiment")])
 g.w <- graph.edgelist(dat.matrix[,1:2], directed = FALSE)
 
 #scale the vertices to degree size
-g.w <- simplify(g.w)
-deg <- degree(g.w, mode = 'all')
+g.w <- igraph::simplify(g.w)
+deg <- igraph::degree(g.w, mode = 'all')
 V(g.w)$size <- sqrt(deg)*3
 
 #add the weights
 weights <- as.numeric(dat.matrix[,3])
 weights[weights == 0] <- 10^-6
 E(g.w)$weight <- weights
-summary(weights)
 ```
 
-```{r}
+Visualize the graph!
+
+
+```{r warning = FALSE, echo = FALSE}
+library(ggnetwork)
+#reprocess
+g.w <- igraph::simplify(g.w)
+gw <- g.w
+E(gw)$weight <- 1
+gw <- igraph::simplify(gw, edge.attr.comb="sum")
+V(gw)$weight <- igraph::degree(g.w, mode = 'all')
+#redo
+set.seed(1492)
+Dat <- ggnetwork(gw, layout="fruchtermanreingold", arrow.gap=0, cell.jitter=0)
+Dat$x <- as.vector(Dat$x)
+Dat$y <- as.vector(Dat$y)
+Dat$xend <- as.vector(Dat$xend)
+Dat$yend <- as.vector(Dat$yend)
+Dat$size <- as.vector(Dat$size)
+
+ggplot(Dat) +
+  geom_edges(aes(x=x, y=y, xend = xend, yend = yend),
+             color="grey50", curvature=0.1, size=0.15, alpha=1/2) +
+  geom_nodes(data=Dat,
+             aes(x=x, y=y, xend=xend, yend=yend, size=sqrt(size)),
+             alpha=1/3) +
+  theme_blank() +
+  theme(legend.position="none") -> gg
+gg
+```
+
+
+```{r warning = FALSE, echo = FALSE}
+g.w <- igraph::simplify(g.w)
 #summary about the degrees of this graph 
 PDF <- degree.distribution(g.w)
 CDF <- degree.distribution(g.w, cumulative = T)
-plot(x = 0:max(degree(g.w)), y=1-CDF, pch=19, cex=0.5, col="orange", 
-     xlab="Degree", ylab="Frequency", type = 'o')
+
+#Degree distribution of the graph
+plot(x = 0:max(igraph::degree(g.w)), y=1-CDF, pch=19, cex=0.5, col="orange", 
+     xlab="Degree", ylab="Frequency", type = 'o', main = "Degree Frequency")
 points(PDF, type = 'o', col = 'blue', cex = 0.5)
+legend(x = 57.5, y = 0.15, legend = c('Cumulative Frequency', 'Frequency'), col = c('orange','blue'), pch = c(19,1), lty = c(1,1), cex = 0.5, bty = 'n')
 
+#Distribution of weights of the graph
 weights <- data.frame(weights)
-ggplot(weights) + geom_histogram(aes(weights), fill = 'red', col = 'black', binwidth = 0.5)
+ggplot(weights) + geom_histogram(aes(weights), fill = 'red', col = 'black', binwidth = 0.5) +
+  xlab("Weights") + ylab("Weight Counts")
 
+#cluster size
 clusters <- data.frame(clusters = clusters(g.w)$csize)
-ggplot(clusters) + geom_histogram(aes(clusters), fill = 'purple', col = 'orange', bins = 20) + scale_y_log10() + scale_x_log10()
-
-
-g.w.mod <- g.w
-E(g.w.mod)$actweight <- E(g.w)$weight
-E(g.w.mod)$weight <- abs(E(g.w)$weight)
-x <- betweenness(g.w.mod)
-y <- closeness(g.w.mod)
-first.order.hood <- neighborhood.size(g.w.mod)
-second.order.hood <- neighborhood.size(g.w.mod, order = 2)
-ggplot(data.frame(foh = first.order.hood, soh = second.order.hood)) + geom_point(aes(foh, soh, col = soh - foh))
-
-
+ggplot(clusters) + geom_histogram(aes(clusters), fill = 'purple', col = 'orange', bins = 20) + scale_y_log10() + scale_x_log10() + xlab("Cluster Size (Log-10)") + ylab("Counts (Log-10)")
 ```
 
 
-```{r}
-V(g.w)$comp <- components(g.w)$membership
+```{r warning = FALSE, echo = FALSE}
+V(g.w)$comp <- igraph::components(g.w)$membership
 
 
 #isolate 15 largest componets
 comps <- as.numeric(names(sort(table(V(g.w)$comp), decreasing = T)[1:15]))
-length(comps)
+
 ind <- which(V(g.w)$comp %in% comps)
 main <- induced_subgraph(g.w,ind)
-
-#
-l <- layout_with_mds(main)
-plot(main, layout = l, vertex.label = NA, edge.width = 0.01, main = "Largest Connected Component")
-
-positive <- delete_edges(main, E(main)[weight <= 10^-6])
-negative <- delete_edges(main, E(main)[weight > 10^-6])
-
-plot(positive, vertex.label = NA, layout = layout_with_mds(positive), main = "Positive Connections\nin\n Largest Connected Component")
-plot(negative, vertex.label = NA, layout = layout_with_mds(negative), main = "Negative Connections\nin\n Largest Connected Component")
+ind <- which(V(g.w)$comp %in% comps[1])
+LCC <- induced_subgraph(g.w,ind)
+weights.LCC <- E(LCC)$weight
+ggplot(data.frame(weights.LCC)) + geom_histogram(aes(weights.LCC), fill = 'red', col = 'black', binwidth = 0.5)
 ```
 
-```{r}
 
-ind <- which(V(main)$comp %in% as.numeric(names(sort(table(V(main)$comp),decreasing = T)[1])))
-LCC <- induced_subgraph(main,ind)
 
-vertices_oij <- vertex_attr(LCC)$name
 
-#issa way to force it to happen :( 
-oijs = c()
-for(i in vertices_oij){
-  one <- unique(neighbors(LCC,i))
-    for(j in vertices_oij){
-      two <- unique(neighbors(LCC,j))
-      if(i == j){oij = NA} 
-      else {
-        if(length(one) + length(two) - 2 > 0 & length(one) > 0 & length(two) > 0){ 
-          oij <- sum(one %in% two)/(length(one) + length(two) - 2 - sum(one %in% two))
-        }
-        else{
-          oij = NA
-        }
-      }
-    oijs = c(oijs, oij)
-    }
+```{r warning = FALSE, echo = FALSE}
+positive <- delete_edges(main, E(main)[weight <= 10^-6])
+negative <- delete_edges(main, E(main)[weight > 10^-6])
+par(mfrow = c(2,2))
+plot(main, vertex.label = NA, layout = layout_with_mds(main), main = "Fifteen Largest Connected Components")
+plot(positive, vertex.label = NA, layout = layout_with_mds(positive), main = "Positive Connections\nin\n Largest Connected Components")
+plot(negative, vertex.label = NA, layout = layout_with_mds(negative), main = "Negative Connections\nin\n Largest Connected Components")
+plot(LCC, vertex.label = NA, layout = layout_with_mds(LCC), main = "Largest Connected Component")
+```
+
+
+
+
+
+```{r warning = FALSE, echo = FALSE}
+net <- network(intergraph::asNetwork(LCC),directed = F)
+
+# Get a data.frame of edges and add an arbitrary time unit
+dat <- as.data.frame(igraph::get.edgelist(LCC), stringsAsFactors = F) #get dataframe of edges
+colnames(dat)<-c("from", "to") #add column names
+dat$time <- round(seq.int(1,8,length.out=nrow(dat)),0) #add a time variable
+
+# Convert df to a matrix of when node present or absent
+tmp = data.frame(nodeid = c(dat$from,dat$to), time=dat$time) %>% group_by(nodeid) %>% 
+      filter(time==min(time)) %>% unique %>% arrange(nodeid)
+
+out <- sapply(tmp$time, function(i) c(rep(0, i-1), rep(1,8-i+1)))
+out[out==0]<-NA
+
+
+
+# Define vertex attribute activation as 1 or NA:
+net %v% "t1" = out[1,]
+net %v% "t2" = out[2,]
+net %v% "t3" = out[3,]
+net %v% "t4" = out[4,]
+net %v% "t5" = out[5,]
+net %v% "t6" = out[6,]
+net %v% "t7" = out[7,]
+net %v% "t8" = out[8,]
+
+
+#for color
+mycols <- rev(brewer.pal(9, "Greens")[-1]) #remove really overly light color
+
+# Set up the initial layout
+x = gplot.layout.fruchtermanreingold(net, NULL) 
+net %v% "x" = x[, 1]
+net %v% "y" = x[, 2]
+
+# Create ggnet2 plots removing inactive nodes and setting initial layout
+t1 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t1")
+t2 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t2")
+t3 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t3")
+t4 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t4")
+t5 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t5")
+t6 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t6")
+t7 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t7")
+t8 = ggnet2(net, mode = c("x", "y"), size = 0,  node.color = mycols[tmp$time], na.rm = "t8")
+
+
+
+# Set up some plot features
+b1 = theme(panel.background = element_rect(color = "grey50"),
+           plot.title = element_text(size=rel(2.1)))
+b2 = geom_point(aes(color = color), size = 1, color = "white")
+b3 =  geom_point(aes(color = color), size = 1, alpha = 0.4)
+b4 =  geom_point(aes(color = color), size = 1) 
+b5 =  guides(color = FALSE)
+y1 = scale_y_continuous(limits = range(x[, 2] * 1.1), breaks = NULL)
+x1 = scale_x_continuous(limits = range(x[, 1] * 1.1), breaks = NULL)
+
+# show each temporal network
+gridExtra::grid.arrange(t1 + x1 + y1  + ggtitle("t = 1") + b1 + b2 + b3 + b4 + b5,
+                        t2 + x1 + y1  + ggtitle("t = 2") + b1 + b2 + b3 + b4 + b5,
+                        t3 + x1 + y1  + ggtitle("t = 3") + b1 + b2 + b3 + b4 + b5,
+                        t4 + x1 + y1  + ggtitle("t = 4") + b1 + b2 + b3 + b4 + b5,
+                        t5 + x1 + y1  + ggtitle("t = 5") + b1 + b2 + b3 + b4 + b5,
+                        t6 + x1 + y1  + ggtitle("t = 6") + b1 + b2 + b3 + b4 + b5,
+                        t7 + x1 + y1  + ggtitle("t = 7") + b1 + b2 + b3 + b4 + b5,
+                        t8 + x1 + y1  + ggtitle("t = 8") + b1 + b2 + b3 + b4 + b5,
+                        nrow = 2)
+```
+
+```{r warning = FALSE, echo = FALSE}
+#name of the vertices
+handle <- V(LCC)$name
+#Centrality of vertices
+V(LCC)$size <- igraph::degree(LCC, mode = 'all')
+Centrality <- V(LCC)$size
+#hubscore of vertices
+V(LCC)$power <- hub.score(LCC)$vector
+hubscore <- V(LCC)$power
+
+df <- data.frame(handle = handle, centrality = Centrality, hub_score = hubscore)
+
+gg_point_0 <- ggplot(df, aes(x = centrality, y = hub_score, tooltip = handle, data_id = handle) ) + 
+  geom_point_interactive(size=1) + theme_bw() + theme(text = element_text(size = rel(5.5))) +ylab("Hub Score")+
+  xlab("Degree Centrality")
+
+tooltip_css <- "background-opacity:0;font-size: 200%;font-style:italic;padding:10px;border-radius:10px 20px 10px 20px;"
+
+ggiraph(code = {print(gg_point_0)}, tooltip_offx = 10, tooltip_offy = -30,tooltip_extra_css = tooltip_css, tooltip_opacity = .75,hover_css = "stroke:red;fill:red;stroke-width:7pt" )
+```
+
+```{r warning = FALSE, echo = FALSE}
+datatable(arrange(data_frame(Person=V(LCC)$name, Centrality=V(LCC)$size), desc(Centrality)))
+colnames(dat) <- c("From:", "To:", "Times")
+datatable(arrange(dat, desc(Times)))
+
+#reprocess
+g <- LCC
+g <- igraph::simplify(g, edge.attr.comb="sum")
+E(g)$weight
+#redo
+set.seed(1492)
+Dat <- ggnetwork(g, layout="fruchtermanreingold", arrow.gap=0, cell.jitter=0)
+Dat$x <- as.vector(Dat$x)
+Dat$y <- as.vector(Dat$y)
+Dat$xend <- as.vector(Dat$xend)
+Dat$yend <- as.vector(Dat$yend)
+Dat$size <- as.vector(Dat$size)
+ggplot() +
+  geom_edges(data=Dat, 
+             aes(x=x, y=y, xend=xend, yend=yend),
+             color="grey50", curvature=0.1, size=0.15, alpha=1/2) +
+  geom_nodes(data=Dat,
+             aes(x=x, y=y, xend=xend, yend=yend, size=sqrt(size)),
+             alpha=1/3) +  
+  geom_label_repel(data=unique(Dat[Dat$size>15,c(1,2,6,7)]),
+                   aes(x=x, y=y, label=vertex.names), 
+                   size=2, color="#8856a7") + 
+  theme_blank() +
+  theme(legend.position="none") -> gg
+gg
+```
+
+```{r warning = FALSE, echo = FALSE}
+top <- unique(Dat[Dat$size>15,7])
+tweetstops <- read.csv("murfreesboro102817.csv", stringsAsFactors = F)
+tweetstops <- tweetstops %>% filter(replyToSN %in% top | screenName %in% top) 
+replace_reg <- "https://t.co/[A-Za-z\\d]+|http://[A-Za-z\\d]+|&amp;|&lt;|&gt;|RT|https"
+for(i in 1:length(tweetstops[,1])){
+  tweet <- tweetstops[i,1]
+  tweet <- sub("rt ", "", tweet) #remove retweet 
+  tweet <- gsub("@\\w+", "", tweet) # remove at(@)
+  tweet <- gsub("&lt;3","",tweet) #removes ASCII hearts <3 
+  tweet <- gsub("&lt;|&gt;|&le;|&ge;","",tweet) #removes html <, >, <=, >=
+  tweet <- str_replace_all(tweet ,replace_reg, "")  # remove links https 
+  tweet <- gsub("[ |\t]{2,}", " ", tweet) # remove tabs 
+  tweet <- iconv(tweet, "latin1", "ASCII", sub="") #makes emojis readable 
+  tweet <- gsub("<[^>]+>", "", tweet) #removes remaining text from emojis
+  tweet <- gsub("[\r|\n|\t|\v|\f]", "", tweet) #removes form feeds tabs etc
+  tweet <- gsub("^ ", "", tweet)  # remove blank spaces at the beginning
+  tweet <- gsub(" $", "", tweet) # remove blank spaces at the end
+  tweetstops[i,1] <- capitalize(tweet)
 }
+topTweets <- tweetstops
+topTweets <- topTweets[,c(1,11,4)]
+datatable(topTweets)
+```
+
+
+```{r eval = FALSE}
+edges <- data.frame(from  = get.edgelist(LCC)[,1], to = get.edgelist(LCC)[,2])
+edges$time <- 1:nrow(edges)
+edges$timebins <- as.numeric(cut(edges$time, breaks = 100))
+
+
+# We want that nice fading effect so we need to add extra data for the trailing
+edgesAnim <- lapply(1:10, function(i) {edges$timebins  <- edges$timebins + i; edges$delay <- i; edges})
+edges$delay <- 0
+edgesAnim <- rbind(edges, do.call(rbind, edgesAnim))
+edgesGraph <- graph_from_data_frame(edgesAnim, directed = F)
+
+# We use only original data for the layout
+subGr <- subgraph.edges(edgesGraph, which(E(edgesGraph)$delay == 0))
+V(subGr)$degree <- igraph::degree(subGr, mode = 'all')
+lay <- createLayout(subGr, 'igraph', algorithm = 'lgl')
+
+# Then we reassign the full graph with edge trails
+attr(lay, 'graph') <- edgesGraph
+
+# Now we create the graph with timebins as frame
+p <- ggraph(graph = edgesGraph, layout = 'kk') + 
+  geom_node_point(aes(size = 1)) + 
+  geom_edge_link(aes(frames = timebins, alpha = delay, width = delay)) +  
+  scale_edge_alpha(range = c(1, 0), guide = 'none') + 
+  scale_edge_width(range = c(0.5, 1.5), trans = 'exp', guide = 'none') + 
+  scale_size(guide = 'none') + 
+  ggtitle('Temporal Ordering of Edge Attachment')
+
+
+# And then we animate
+animation::ani.options(interval=0.2)
+gganimate_save(p, 'C:/Users/debri/Desktop/BST 260 Project/GroupProjectBST260/animation/', saver = 'gif')
+
+```
+
+
+
+```{r warning = FALSE, echo = FALSE}
+library(visNetwork)
+comps <- as.numeric(names(sort(table(V(g.w)$comp), decreasing = T)[3]))
+ind <- which(V(g.w)$comp %in% comps)
+three <- induced_subgraph(g.w,ind)
+
+#interactive network
+set.seed(1492)
+nodes <- data.frame(id = as.character(V(three)$name))
+E(three)$weight <- abs(E(three)$weight)
+nodes$group <- cluster_fast_greedy(three)$membership
+V(three)$size <- igraph::degree(three)
+nodes$font.size <- 20
+nodes$size <- V(three)$size
+edges <- data.frame(get.edgelist(three))
+colnames(edges)<-c("from","to")
+
+# Plot with defaut layout
+visNetwork(nodes, edges, height = "600px") %>%
+  visIgraphLayout() %>%
+  visNodes(size = nodes$size*3) %>%
+  visOptions(selectedBy = "group", 
+             highlightNearest = TRUE, 
+             nodesIdSelection = TRUE) %>%  
+  visInteraction(keyboard = TRUE,
+                 dragNodes = T, 
+                 dragView = T, 
+                 zoomView = T)
+
+
+```
+
+
+```{r}
+library(apcluster)
+netm <- get.adjacency(three, attr="weight", sparse=F)
+colnames(netm) <- V(three)$name
+rownames(netm) <- V(three)$name
+netm2 <- aggExCluster(negDistMat(r=2), netm)
+par(mfrow = c(1,2))
+heatmap(netm2,Rowv = NA, Colv = NA, margins=c(10,10))
+heatmap(netm, Rowv = NA, Colv = NA, margins=c(10,10))
+xx <- prcomp(netm - rowMeans(netm), center = TRUE)
+k <- sum(xx$sdev^2 > 1)
+tmpr <- aggExCluster(negDistMat(r=2),xx$x[,1:k])
+par(mfrow = c(1,2))
+heatmap(tmpr, Rowv = NA, Colv = NA, margins=c(10,10))
+heatmap(xx$x[,1:k], Rowv = NA, Colv = NA, margins=c(10,10))
+```
+
+
+```{r}
+netL <- get.adjacency(LCC, attr="weight", sparse=F)
+set.seed(125)
+n <- nrow(netL)
+ind <- sample(1:n,100)
+netLL <- netL[ind,ind]
+colnames(netLL) <- NULL
+rownames(netLL) <- NULL 
+netLL2 <- aggExCluster(negDistMat(r=2), netLL)
+heatmap(netLL, Rowv = NA, Colv = NA, margins=c(10,10))
+heatmap(netLL2,Rowv = NA, Colv = NA, margins=c(10,10))
 ```
 

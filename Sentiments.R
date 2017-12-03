@@ -2,8 +2,6 @@ library(dplyr)
 library(tidytext)
 library(tidyverse)
 library(stringr)
-library(gridExtra)
-library(timevis)
 library(lubridate)
 library(scales)
 library(knitr)
@@ -46,6 +44,9 @@ tweets_afinn_sentiment <- tokens %>%
   mutate(created = ymd_hms(created)) %>%
   select(created, id, screenName, retweetCount, tweet_sentiment, day, minutes_15, replyToSN)
 
+
+# Rounding time of tweet to the nearest 15 minutes
+
 tweets_afinn_sentiment$round_qhr <- round_qhr <- as.POSIXct(round(as.double(tweets_afinn_sentiment$created)/(15*60))*(15*60), origin=(as.POSIXct('1970-01-01')))
 
 
@@ -66,7 +67,7 @@ network_stars <-  c("BigBoyVol", "BlueRaiderDJ", "Limbaugh2016", "ChadCaldwell24
                     "justasking3time")
 
 
-#filter tweets for networks of big players
+#filter tweets for networks of big players, create network identifier
 
 network_stars_tweets <- tweets_afinn_sentiment %>%
   filter(replyToSN %in% network_stars | screenName %in% network_stars) %>%
@@ -87,16 +88,37 @@ saturday <-  tweets_afinn_sentiment %>%
   filter(day == "Saturday") %>%
   ggplot(aes(x = round_qhr, y = tweet_sentiment)) +
   geom_point(aes(size = n, color = Positive), alpha = 0.75) +
-  geom_smooth(color = "grey", linetype = "dotted") +
+  geom_smooth(color = "orange", linetype = "dotted") +
   scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("2 hour")) +
   scale_y_continuous(limits = c(-2, 2)) +
   xlab("Hour") +
-  ylab("Average Twitter Sentiment")
+  ylab("Average Twitter Sentiment") +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -2, xend = as.POSIXct("2017-10-28 03:00:00"), yend = -0.5), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -0.35, label = "Murfreesboro: Police \n close town square"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 2, xend = as.POSIXct("2017-10-28 09:00:00"), yend = 1.6), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 1.5, label = "Shelbyville: Law enforcement \n arrives in riot gear"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -2, xend = as.POSIXct("2017-10-28 10:15:00"), yend = -1.6), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -1.5, label = "Shelbyville: First white nationalist \n and counter-protestors arrive"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = 2, xend = as.POSIXct("2017-10-28 12:00:00"), yend = -0.65), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = -0.75, label = "Shelbyville: 400 counter-protestors, \n 200 white nationalists on site"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 14:00:00"), y = 2, xend = as.POSIXct("2017-10-28 14:00:00"), yend = -0.2), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 15:30:00"), y = -0.3, label = "Shelbyville: White nationalists elect \n to move to Murfeesboro"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 16:00:00"), y = -2, xend = as.POSIXct("2017-10-28 16:00:00"), yend = -1.25), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 16:30:00"), y = -1.1, label = "Murfreesboro rally fizzles \n as white nationalist numbers dwindle"), size = 4, data = data.frame()) +
+  ggtitle("Average Sentiment during Murfreesboro/Shelbyville Protest") +
+  theme(legend.title = element_text(size = 15), legend.text = element_text(size = 10), plot.title = element_text(hjust = 0.5, size = 25), axis.text = element_text(size = 15), axis.title = element_text(size = 15)) 
 
 
 # Big player networks over time
 
 saturday_stars <- network_stars_tweets %>%
+  filter(created < as.POSIXct("2017-10-28 17:30:00") & created > as.POSIXct("2017-10-28 02:00:00")) %>%
   group_by(day, minutes_15) %>%
   mutate(tweet_sentiment = mean(tweet_sentiment),
          n = n(),
@@ -104,12 +126,15 @@ saturday_stars <- network_stars_tweets %>%
   filter(day == "Saturday") %>%
   ggplot(aes(x = round_qhr, y = tweet_sentiment)) +
   geom_point(aes(size = n, color = Positive), alpha = 0.75) +
-  geom_smooth(color = "grey", linetype = "dotted", se = FALSE) +
+  geom_smooth(color = "orange", linetype = "dotted", se = FALSE) +
   scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("4 hour")) +
-  scale_y_continuous(limits = c(-2, 2)) +
+  scale_y_continuous(limits = c(-3, 3)) +
   xlab("Hour") +
   ylab("Average Twitter Sentiment") +
-  facet_wrap(~network, nrow = 3)
+  facet_wrap(~network, nrow = 3) +
+  ggtitle("Average Sentiment during Murfreesboro/Shelbyville Protest by Network") +
+  theme(legend.title = element_text(size = 15), legend.text = element_text(size = 10), plot.title = element_text(hjust = 0.5, size = 15), axis.text = element_text(size = 8), axis.title = element_text(size = 15)) 
+
   
 
 # NRC sentiments for networks
@@ -141,14 +166,15 @@ sentiment_nrc_time <- tweets_nrc_sentiment %>%
   ungroup() %>%
   mutate(sentiment_overall = ifelse(sentiment %in% c("fear", "anticipation", "surprise"), "Suspense", NA),
          sentiment_overall = replace(sentiment_overall, sentiment %in% c("positive", "joy", "trust"), "Positive"),
-         sentiment_overall = replace(sentiment_overall, is.na(sentiment_overall), "Negative"))
-  distinct(sentiment, day, round_qhr, n_time, n_sentiment, sentiment_share)
+         sentiment_overall = replace(sentiment_overall, is.na(sentiment_overall), "Negative")) %>%
+  distinct(sentiment, day, round_qhr, n_time, n_sentiment, sentiment_share, created, sentiment_overall)
 
 
 
-#Plot of sentiment over time
+#Plot of sentiment share over time
 
-sentiment_nrc_time %>%
+sentiment_share <- sentiment_nrc_time %>%
+  filter(created < as.POSIXct("2017-10-28 17:30:00") & created > as.POSIXct("2017-10-28 02:00:00")) %>%
   filter(day == "Saturday") %>%
   ggplot(aes(x = round_qhr, y = sentiment_share, color = sentiment)) + 
   geom_smooth(se = FALSE) +
@@ -159,48 +185,24 @@ sentiment_nrc_time %>%
 
 "source: http://www.tennessean.com/story/news/2017/10/28/white-lives-matter-rally-murfreesboro-tn-live-updates-shelbyville-tn-stream-video/804380001/"
 
-#afinn
+#nrc anticipation and anger over time
 
-saturday  +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -2, xend = as.POSIXct("2017-10-28 03:00:00"), yend = -0.9), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -0.8, label = "Murfreesboro: Police \n close town square"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 2, xend = as.POSIXct("2017-10-28 09:00:00"), yend = 1.6), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 1.5, label = "Shelbyville: Law enforcement \n arrives in riot gear"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -2, xend = as.POSIXct("2017-10-28 10:15:00"), yend = -1.6), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -1.5, label = "Shelbyville: First white nationalist \n and counter-protestors arrive"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = 2, xend = as.POSIXct("2017-10-28 12:00:00"), yend = -0.65), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = -0.75, label = "Shelbyville: 400 counter-protestors, \n 200 white nationalists on site"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 14:00:00"), y = 2, xend = as.POSIXct("2017-10-28 14:00:00"), yend = -0.2), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 15:30:00"), y = -0.3, label = "Shelbyville: White nationalists elect \n to move to Murfeesboro"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 16:00:00"), y = -2, xend = as.POSIXct("2017-10-28 16:00:00"), yend = -1.25), size = 0.2,
-               linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 16:30:00"), y = -1.1, label = "Murfreesboro rally fizzles \n as white nationalist numbers dwindle"), size = 4, data = data.frame()) +
-  ggtitle("Average Sentiment during Murfreesboro/Shelbyville Protest") +
-  theme(plot.title = element_text(hjust = 0.5, size = 25)) 
-
-#nrc
-
-sentiment_nrc_time %>%
+sentiment_share_limited <- sentiment_nrc_time %>%
   mutate(Sentiment = sentiment, n = n_sentiment) %>%
   filter(created < as.POSIXct("2017-10-28 17:30:00") & created > as.POSIXct("2017-10-28 02:00:00")) %>%
   filter(day == "Saturday" & sentiment %in% c("anticipation", "anger")) %>%
   ggplot(aes(x = round_qhr, y = sentiment_share)) + 
   geom_point(aes(size = n, color = Sentiment), alpha = 0.35) +
   geom_smooth(se = FALSE, aes(color = sentiment)) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = 0.4, xend = as.POSIXct("2017-10-28 03:00:00"), yend = 0.24), size = 0.2,
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = 0.4, xend = as.POSIXct("2017-10-28 03:00:00"), yend = 0.215), size = 0.2,
                linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = 0.23, label = "Murfreesboro: Police \n close town square"), size = 4, data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = 0.20, label = "Murfreesboro: Police \n close town square"), size = 4, data = data.frame()) +
   geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 0, xend = as.POSIXct("2017-10-28 09:00:00"), yend = 0.135), size = 0.2,
                linetype = "dashed", data = data.frame()) +
   geom_text(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 0.15, label = "Shelbyville: Law enforcement \n arrives in riot gear"), size = 4, data = data.frame()) +
-  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = 0.4, xend = as.POSIXct("2017-10-28 10:15:00"), yend = 0.24), size = 0.2,
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = 0.4, xend = as.POSIXct("2017-10-28 10:15:00"), yend = 0.285), size = 0.2,
                linetype = "dashed", data = data.frame()) +
-  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = 0.225, label = "Shelbyville: First white nationalist \n and counter-protestors arrive"), size = 4, data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = 0.3, label = "Shelbyville: First white nationalist \n and counter-protestors arrive"), size = 4, data = data.frame()) +
   geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = 0, xend = as.POSIXct("2017-10-28 12:00:00"), yend = 0.07), size = 0.2,
                linetype = "dashed", data = data.frame()) +
   geom_text(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = 0.085, label = "Shelbyville: 400 counter-protestors, \n 200 white nationalists on site"), size = 4, data = data.frame()) +
@@ -211,13 +213,12 @@ sentiment_nrc_time %>%
                linetype = "dashed", data = data.frame()) +
   geom_text(mapping = aes(x = as.POSIXct("2017-10-28 16:30:00"), y = 0.05, label = "Murfreesboro rally fizzles \n as white nationalist numbers dwindle"), size = 4, data = data.frame()) +
   ggtitle("Sentiment Share during Murfreesboro/Shelbyville Protest") +
-  theme(plot.title = element_text(hjust = 0.5, size = 25)) +
+  theme(legend.title = element_text(size = 18), legend.text = element_text(size = 15), plot.title = element_text(hjust = 0.5, size = 25), axis.text = element_text(size = 15), axis.title = element_text(size = 15)) +
   scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("2 hour")) +
   scale_y_continuous(limits = c(0, 0.4)) +
   xlab("Hour") +
   ylab("Share of Total Sentiments Expressed")
 
-table(nrc_sentiments$sentiment)
 
 #limitations
 
@@ -293,7 +294,7 @@ tweets_afinn_sentiment %>%
 
 # Trumps network
 
-network_stars_tweets %>%
+trump <- network_stars_tweets %>%
   filter(created < as.POSIXct("2017-10-28 17:30:00") & created > as.POSIXct("2017-10-28 02:00:00")) %>%
   filter(network == "realDonaldTrump") %>%
   group_by(day, minutes_15) %>%
@@ -326,5 +327,13 @@ network_stars_tweets %>%
                linetype = "dashed", data = data.frame()) +
   geom_text(mapping = aes(x = as.POSIXct("2017-10-28 15:30:00"), y = -2.35, label = "Murfreesboro rally fizzles \n as white nationalist numbers dwindle"), size = 4, data = data.frame()) +
   ggtitle("Donald Trump's Network during Murfreesboro/Shelbyville Protest") +
-  theme(plot.title = element_text(hjust = 0.5, size = 25))
+  theme(legend.title = element_text(size = 12), legend.text = element_text(size = 9), plot.title = element_text(hjust = 0.5, size = 25), axis.text = element_text(size = 15), axis.title = element_text(size = 15))
 
+
+# Plots
+
+saturday
+saturday_stars
+trump
+sentiment_share
+sentiment_share_limited

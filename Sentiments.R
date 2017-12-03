@@ -335,5 +335,4 @@ trump <- network_stars_tweets %>%
 saturday
 saturday_stars
 trump
-sentiment_share
 sentiment_share_limited

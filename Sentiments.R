@@ -4,7 +4,9 @@ library(tidyverse)
 library(stringr)
 library(chron)
 library(gridExtra)
-library(gganimate)
+library(timevis)
+library(lubridate)
+library(scales)
 
 data("stop_words")
 
@@ -28,7 +30,7 @@ afinn_sentiments <- get_sentiments("afinn")
 
 tweets_afinn_sentiment <- tokens %>%
   inner_join(afinn_sentiments, by = "word") %>%
-  group_by(id, created) %>%
+  group_by(screenName, created) %>%
   mutate(tweet_sentiment = mean(score),
          day = "", 
          day = replace(day, str_sub(created, start = 9, end = 10) == "29", "Sunday"),
@@ -36,8 +38,11 @@ tweets_afinn_sentiment <- tokens %>%
          day = replace(day, str_sub(created, start = 9, end = 10) == "27", "Friday"),
          minutes_15 = round(60 * 24 * as.numeric(times(str_sub(created, start = -8, end = -1))), 0),
          minutes_15 = trunc(minutes_15/15)) %>%
+  ungroup() %>%
+  mutate(created = ymd_hms(created)) %>%
   select(created, id, screenName, retweetCount, tweet_sentiment, day, minutes_15, replyToSN)
 
+tweets_afinn_sentiment$round_qhr <- round_qhr <- as.POSIXct(round(as.double(tweets_afinn_sentiment$created)/(15*60))*(15*60), origin=(as.POSIXct('1970-01-01')))
 
 ##Big players for network analysis
 
@@ -56,91 +61,110 @@ network_stars_tweets <- tweets_afinn_sentiment %>%
 
 #Plots
 
-# All tweets sentiment over time
+# All tweets sentiment over time (saturday)
 
-
-friday <-  tweets_afinn_sentiment %>%
-  group_by(minutes_15) %>%
-  mutate(tweet_sentiment = mean(tweet_sentiment),
-         n = n()) %>%
-  filter(day == "Friday") %>%
-  ggplot(aes(frame = minutes_15)) +
-  geom_point(aes(x = minutes_15, y = tweet_sentiment, size = n)) +
-  geom_smooth(aes(x = minutes_15, y = tweet_sentiment))
 
 saturday <-  tweets_afinn_sentiment %>%
-  group_by(minutes_15) %>%
+  filter(created < as.POSIXct("2017-10-28 17:30:00") & created > as.POSIXct("2017-10-28 02:00:00")) %>%
+  group_by(day, minutes_15) %>%
   mutate(tweet_sentiment = mean(tweet_sentiment),
-         n = n()) %>%
+         n = n(),
+         Positive = (tweet_sentiment > 0)) %>%
   filter(day == "Saturday") %>%
-  ggplot() +
-  geom_point(aes(x = minutes_15, y = tweet_sentiment, size = n)) +
-  geom_smooth(aes(x = minutes_15, y = tweet_sentiment))
+  ggplot(aes(x = round_qhr, y = tweet_sentiment)) +
+  geom_point(aes(size = n, color = Positive), alpha = 0.75) +
+  geom_smooth(color = "grey", linetype = "dotted") +
+  scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("2 hour")) +
+  scale_y_continuous(limits = c(-2, 2)) +
+  xlab("Hour") +
+  ylab("Average Twitter Sentiment")
 
-sunday <-  tweets_afinn_sentiment %>%
-  group_by(minutes_15) %>%
-  mutate(tweet_sentiment = mean(tweet_sentiment),
-         n = n()) %>%
-  filter(day == "Sunday") %>%
-  ggplot() +
-  geom_point(aes(x = minutes_15, y = tweet_sentiment, size = n)) +
-  geom_smooth(aes(x = minutes_15, y = tweet_sentiment))
-
-grid.arrange(friday, saturday, sunday)
 
 # Big player networks over time
 
-network_stars_tweets %>%
-  group_by(minutes_15) %>%
+saturday_stars <- network_stars_tweets %>%
+  group_by(day, minutes_15) %>%
   mutate(tweet_sentiment = mean(tweet_sentiment),
-         n = n()) %>%
+         n = n(),
+         Positive = (tweet_sentiment > 0)) %>%
   filter(day == "Saturday") %>%
-  ggplot() +
-  geom_point(aes(x = minutes_15, y = tweet_sentiment, size = n, colour = network)) +
-  geom_smooth(aes(x = minutes_15, y = tweet_sentiment))
+  ggplot(aes(x = round_qhr, y = tweet_sentiment)) +
+  geom_point(aes(size = n, color = Positive), alpha = 0.75) +
+  geom_smooth(color = "grey", linetype = "dotted") +
+  scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("2 hour")) +
+  scale_y_continuous(limits = c(-2, 2)) +
+  xlab("Hour") +
+  ylab("Average Twitter Sentiment") +
+  facet_wrap(~network)
 
 # NRC sentiments for networks
 
 tweets_nrc_sentiment <- tokens %>%
   inner_join(nrc_sentiments, by = "word") %>%
-  group_by(id, created) %>%
   mutate(day = "", 
          day = replace(day, str_sub(created, start = 9, end = 10) == "29", "Sunday"),
          day = replace(day, str_sub(created, start = 9, end = 10) == "28", "Saturday"),
          day = replace(day, str_sub(created, start = 9, end = 10) == "27", "Friday"),
          minutes_15 = round(60 * 24 * as.numeric(times(str_sub(created, start = -8, end = -1))), 0),
-         minutes_15 = trunc(minutes_15/15)) %>%
+         minutes_15 = trunc(minutes_15/15),
+         created = ymd_hms(created)) %>%
   select(created, id, screenName, retweetCount, sentiment, day, minutes_15, replyToSN) %>%
   filter(replyToSN %in% network_stars | screenName %in% network_stars) %>%
   mutate(network = ifelse(screenName %in% network_stars, screenName, NA),
          network = replace(network, replyToSN %in% network_stars, replyToSN))
 
+tweets_nrc_sentiment$round_qhr <- round_qhr <- as.POSIXct(round(as.double(tweets_nrc_sentiment$created)/(15*60))*(15*60), origin=(as.POSIXct('1970-01-01')))
 
-# Density of sentiments over time
+# nrc count of sentiments over time
 
-sentiment_density_time <- tweets_nrc_sentiment %>%
-  mutate(sentiment = as.factor(sentiment)) %>%
-  group_by(minutes_15, sentiment) %>%
-  mutate(count = n()) %>%
-  distinct(day, minutes_15, sentiment, density, n_time, network)
+sentiment_nrc_time <- tweets_nrc_sentiment %>%
+  group_by(day, minutes_15) %>%
+  mutate(n_time = n()) %>%
+  ungroup() %>%
+  group_by(day, minutes_15, sentiment) %>%
+  mutate(n_sentiment = n(), sentiment_share = n_sentiment/n_time) %>%
+  ungroup() %>%
+  mutate(sentiment_overall = ifelse(sentiment %in% c("fear", "anticipation", "surprise"), "Suspense", NA),
+         sentiment_overall = replace(sentiment_overall, sentiment %in% c("positive", "joy", "trust"), "Positive"),
+         sentiment_overall = replace(sentiment_overall, is.na(sentiment_overall), "Negative"))
+  distinct(sentiment, day, round_qhr, n_time, n_sentiment, sentiment_share)
 
-#Plot of sentiment density
 
-sentiment_density_time %>%
-  filter(day == "Saturday", network == "realDonaldTrump") %>%
-  ggplot(aes(x = minutes_15, y = ..count.., fill = sentiment)) +
-  geom_density(aes(alpha = 0.6), position = "stack")
-  
-  
-  
-  
-  
-  ggplot(diamonds, aes(x=depth, y=..density..)) + 
-  geom_density(aes(fill=cut), position="stack")
 
-# Limitations of sentiment packages
+#Plot of sentiment over time
 
-nrc_sentiments %>%
-  distinct(sentiment)
+sentiment_nrc_time %>%
+  filter(day == "Saturday") %>%
+  ggplot(aes(x = round_qhr, y = sentiment_share, color = sentiment)) + 
+  geom_smooth(se = FALSE) +
+  facet_grid(~sentiment_overall)
+
+
+#timeline of events
+
+"source: http://www.tennessean.com/story/news/2017/10/28/white-lives-matter-rally-murfreesboro-tn-live-updates-shelbyville-tn-stream-video/804380001/"
+
+
+saturday  +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -2, xend = as.POSIXct("2017-10-28 03:00:00"), yend = -0.9), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 03:00:00"), y = -0.8, label = "Murfreesboro: Police \n close town square"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 2, xend = as.POSIXct("2017-10-28 09:00:00"), yend = 1.6), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 09:00:00"), y = 1.5, label = "Shelbyville: Law enforcement \n arrives in riot gear"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -2, xend = as.POSIXct("2017-10-28 10:15:00"), yend = -1.6), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 10:15:00"), y = -1.5, label = "Shelbyville: First white nationalist \n and counter-protestors arrive"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = 2, xend = as.POSIXct("2017-10-28 12:00:00"), yend = -0.65), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 12:00:00"), y = -0.75, label = "Shelbyville: 400 counter-protestors, \n 200 white nationalists on site"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 14:00:00"), y = 2, xend = as.POSIXct("2017-10-28 14:00:00"), yend = -0.2), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 15:30:00"), y = -0.3, label = "Shelbyville: White nationalists elect \n to move to Murfeesboro"), size = 4, data = data.frame()) +
+  geom_segment(mapping = aes(x = as.POSIXct("2017-10-28 16:00:00"), y = -2, xend = as.POSIXct("2017-10-28 16:00:00"), yend = -1.25), size = 0.2,
+               linetype = "dashed", data = data.frame()) +
+  geom_text(mapping = aes(x = as.POSIXct("2017-10-28 16:30:00"), y = -1.1, label = "Murfreesboro rally fizzles \n as white nationalist numbers dwindle"), size = 4, data = data.frame()) 
+
+
 
 
